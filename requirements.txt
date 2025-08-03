@@ -1,0 +1,15 @@
+# MCP 라이브러리
+mcp==1.10.1
+
+# PostgreSQL 비동기 드라이버
+asyncpg==0.29.0
+
+# 기타 유틸리티
+python-dotenv>=1.1.0
+sqlalchemy==2.0.35
+
+
+fastmcp>=2.3.0
+
+psycopg2-binary==2.9.9
+psycopg[binary]==3.1.12
