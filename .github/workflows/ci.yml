@@ -1,0 +1,69 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: sh80165/sql-mcp-server
+  MANIFEST_REPO: lsh9672/text-to-sql-manifest
+  MANIFEST_FILE_PATH: mcp_server/deployment.yaml
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      build-date: ${{ steps.build-info.outputs.build-date }}
+      short-sha: ${{ steps.build-info.outputs.short-sha }}
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Set build info
+      id: build-info
+      run: |
+        BUILD_DATE=$(date +%Y%m%d%H%M)
+        SHORT_SHA=${GITHUB_SHA::7}
+        echo "build-date=$BUILD_DATE" >> $GITHUB_OUTPUT
+        echo "short-sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+
+    - name: Build and push
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: ${{ env.IMAGE_NAME }}:${{ steps.build-info.outputs.build-date }}_${{ steps.build-info.outputs.short-sha }}
+
+  update-deployment:
+    needs: build-push
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Update private deployment repo
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ env.MANIFEST_REPO }}  # 실제 private CD 레포 이름으로 변경
+        token: ${{ secrets.PRIVATE_REPO_TOKEN }}  # private repo 접근용 PAT
+        path: deployment
+    
+    - name: Update image tag with Kustomize
+      run: |
+        cd deployment
+        
+        # sed로 이미지 태그 업데이트
+        sed -i "s|${{ env.IMAGE_NAME }}:.*|${{ env.IMAGE_NAME }}:${{ needs.build-push.outputs.build-date }}_${{ needs.build-push.outputs.short-sha }}|g" ${{ env.MANIFEST_FILE_PATH }}
+        
+        git config user.name "lsh9672"
+        git config user.email "lsh80165@gmail.com"
+        git add .
+        git commit -m "Feat : Update text-to-sql-mcp image to ${{ github.sha }}"
+        git push origin main
